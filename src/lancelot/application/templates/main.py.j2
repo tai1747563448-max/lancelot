@@ -1,0 +1,30 @@
+"""生成物入口。
+
+由 lancelot compose 生成。不建议手动编辑——下次 compose 会覆盖。
+
+启动：
+    python -m app.main
+"""
+import sys
+from pathlib import Path
+
+# 让 generated/<name>/ 成为 sys.path 的根（让 `import composition` /
+# `from lancelot_runtime...` / `from adapters...` 都能找到）
+GENERATED_ROOT = Path(__file__).resolve().parent.parent
+if str(GENERATED_ROOT) not in sys.path:
+    sys.path.insert(0, str(GENERATED_ROOT))
+
+import composition
+
+
+def main() -> int:
+    app = composition.start()
+    try:
+        composition.run(app)
+    except KeyboardInterrupt:
+        return 130  # 与 shell 约定一致
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

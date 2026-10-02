@@ -1,0 +1,28 @@
+# generated/{{ name }}/config.yaml
+# 由 lancelot compose 生成。生成物启动时**只读这个文件**——不回头问装配器。
+
+generation:
+  timestamp: "{{ timestamp }}"
+  lancelot_version: "1.0.0"
+  selection:
+{% for adapter in adapters %}
+    - adapter_id: "{{ adapter.id }}"
+      category: "{{ adapter.category }}"
+      config:
+{% for field_name, field_spec in adapter.config_schema.items() %}
+{% if field_spec is mapping and field_spec.default is defined %}
+        {{ field_name }}: {{ field_spec.default | tojson }}
+{% elif field_spec is mapping and field_spec.required is defined and field_spec.required %}
+        # {{ field_name }}: REQUIRED (no default in manifest)
+{% endif %}
+{% endfor %}
+{% if adapter.config_schema | length == 0 %}
+      config: {}
+{% endif %}
+{% endfor %}
+
+defaults:
+  model: "lancelot_runtime.model_default.mock"
+  channel: "lancelot_runtime.channel_default.stdio"
+  loop: "lancelot_runtime.loop.single_loop"
+  max_turns: 10

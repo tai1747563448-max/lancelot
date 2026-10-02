@@ -1,0 +1,31 @@
+# generated/{{ name }}
+
+Lancelot 生成框架，由以下选项烘出：
+
+{% for adapter in adapters %}
+- **{{ adapter.id }}** — {{ adapter.name }} ({{ adapter.version }})
+{% endfor %}
+
+## 怎么跑
+
+确保 Python >= 3.11。在本目录：
+
+    python -m app.main
+
+## 它是什么
+
+Lancelot 默认提供：单 agent 循环 + mock 模型 + stdio I/O。
+{% if memory_count %}你选了 {{ memory_count }} 个记忆模块。{% endif %}
+{% if tool_count %}你选了 {{ tool_count }} 个工具。{% endif %}
+
+## 怎么改
+
+本生成物已被 Lancelot 烘好。如需修改选择：
+
+    lancelot compose --use <id>... --name {{ name }} --force
+
+或编辑本目录的 Python 代码直接修改（不推荐——下次 compose 会被覆盖）。
+
+## 独立性
+
+本目录可以拷贝到没有 Lancelot 的机器上直接跑。仅需 Python >= 3.11。
