@@ -32,9 +32,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from lancelot.domain import MemoryEntry, Message, Session, ToolResult
-from lancelot.errors import LoopError, ModelError
-from lancelot.ports import ChannelPort, MemoryPort, ModelPort, ToolPort
+from ..domain import MemoryEntry, Message, Session, ToolResult
+from ..errors import LoopError, ModelError
+from ..ports import ChannelPort, MemoryPort, ModelPort, ToolPort
 
 
 def create_loop(
@@ -141,7 +141,16 @@ class SingleLoop:
         )
 
     def _invoke_tool(self, call: Any) -> ToolResult:
-        """调用一个工具。tool 不存在或抛错时返回 is_error=True（不破坏 loop）。"""
+        """调用一个工具。tool 不存在或抛错时返回 is_error=True（不破坏 loop）。
+
+        adapter 可以返回三种 duck-typed 形态：
+        1. `ToolResult` 实例：尊重 content / is_error，只覆盖 tool_call_id
+        2. `dict`：`{"content": ..., "is_error": bool}`
+        3. 任何其它对象：str() 化、is_error=False
+        这样 adapter 无需 import Lancelot 的 ToolResult dataclass——
+        它只 import duck-typed 接口，可以同时在 source tree 和
+        generated/<name>/adapters/<id>/ 下跑。
+        """
         tool = self._tools.get(call.name)
         if tool is None:
             return ToolResult(
@@ -150,10 +159,35 @@ class SingleLoop:
                 is_error=True,
             )
         try:
-            return tool.invoke(**call.arguments)
+            raw = tool.invoke(**call.arguments)
         except Exception as e:
             return ToolResult(
                 tool_call_id=call.id,
                 content=f"tool '{call.name}' raised: {e}",
                 is_error=True,
             )
+
+        # duck-typing 适配
+        if isinstance(raw, ToolResult):
+            return ToolResult(
+                tool_call_id=call.id,
+                content=raw.content,
+                is_error=raw.is_error,
+            )
+        if isinstance(raw, dict):
+            return ToolResult(
+                tool_call_id=call.id,
+                content=str(raw.get("content", raw)),
+                is_error=bool(raw.get("is_error", False)),
+            )
+        if hasattr(raw, "content") and hasattr(raw, "is_error"):
+            return ToolResult(
+                tool_call_id=call.id,
+                content=str(raw.content),
+                is_error=bool(raw.is_error),
+            )
+        return ToolResult(
+            tool_call_id=call.id,
+            content=str(raw),
+            is_error=False,
+        )

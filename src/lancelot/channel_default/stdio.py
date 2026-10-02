@@ -10,8 +10,8 @@ from __future__ import annotations
 import sys
 from typing import Optional, TextIO
 
-from lancelot.domain import Message
-from lancelot.errors import ChannelError
+from ..domain import Message
+from ..errors import ChannelError
 
 
 def create_channel(

@@ -265,7 +265,7 @@ def _default_lancelot_src() -> Path:
 
     layout:  generator.py → application/ → lancelot/ → src/
     """
-    return Path(__file__).resolve().parent.parent.parent
+    return Path(__file__).resolve().parent.parent
 
 
 def _default_templates_dir() -> Path:

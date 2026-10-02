@@ -112,10 +112,11 @@ def scan(adapters_root: Path, registry: Registry) -> ScanReport:
         )
         return report
 
-    # 一级目录视为 adapter 候选；散落文件忽略
-    candidates = sorted(
-        p for p in adapters_root.iterdir() if p.is_dir() and not p.name.startswith(".")
-    )
+    # V1 layout：adapters/<category>/<name>/. scanner 接受 ≤ 2 层深度：
+    # - 一级：adapters/<name>/（散落 adapter；少见但允许）
+    # - 两级：adapters/<category>/<name>/（标准 layout）
+    # 纯分类目录（不含 MANIFEST.toml 但含子目录）静默跳过
+    candidates = _discover_candidates(adapters_root)
 
     for adapter_dir in candidates:
         try:
@@ -128,6 +129,36 @@ def scan(adapters_root: Path, registry: Registry) -> ScanReport:
             raise
 
     return report
+
+
+# ---------- 目录发现 ----------
+
+
+def _discover_candidates(adapters_root: Path) -> List[Path]:
+    """找出所有含 MANIFEST.toml 的 adapter 目录（V1 layout ≤ 2 层）。
+
+    V1 标准 layout：`adapters/<category>/<name>/`。
+    兼容 layout：`adapters/<name>/`（散落 adapter）。
+    纯分类目录（不含 MANIFEST.toml 但含子目录的）静默跳过。
+    """
+    candidates: List[Path] = []
+    for entry in sorted(
+        p for p in adapters_root.iterdir()
+        if p.is_dir() and not p.name.startswith(".")
+    ):
+        if (entry / "MANIFEST.toml").is_file():
+            # 一级 adapter
+            candidates.append(entry)
+            continue
+        # 否则视为分类目录：扫它的子目录
+        for sub in sorted(
+            p for p in entry.iterdir()
+            if p.is_dir() and not p.name.startswith(".")
+        ):
+            if (sub / "MANIFEST.toml").is_file():
+                candidates.append(sub)
+            # 没 MANIFEST.toml 的子目录 → 静默跳过（不 warning）
+    return candidates
 
 
 # ---------- 单个 adapter 处理 ----------

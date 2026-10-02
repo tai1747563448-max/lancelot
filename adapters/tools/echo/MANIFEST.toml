@@ -1,0 +1,23 @@
+# === Lancelot Manifest v1 ===
+# 解析器：tomllib（标准库）；写回：tomli_w（仅装配器内部使用）
+
+[adapter]
+id            = "tools.echo"
+name          = "Echo Tool"
+version       = "0.1.0"
+category      = "tools"
+description   = "把传入的参数原样返回（JSON 字符串）。最简单的工具实现，用于演示 ToolPort。"
+min_framework = "1.0.0"
+
+[entry]
+module  = "tools.echo"
+factory = "create_tool"
+
+[capabilities]
+provides = ["ToolPort"]
+requires = []
+conflicts = []
+enhances = []
+
+[config]
+schema = {}

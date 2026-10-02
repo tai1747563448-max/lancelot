@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Optional, Protocol
 
-from lancelot.domain import Message
+from ..domain import Message
 
 
 class ChannelPort(Protocol):

@@ -6,10 +6,10 @@
 注意：保留端口（ModelPort / ChannelPort）V1 仅 Lancelot 内部实现，
 不允许 adapter 声明（被 scanner 警告 E_RESERVED_PORT）。
 """
-from lancelot.ports.channel import ChannelPort
-from lancelot.ports.memory import MemoryPort
-from lancelot.ports.model import ModelPort
-from lancelot.ports.tool import ToolPort
+from .channel import ChannelPort
+from .memory import MemoryPort
+from .model import ModelPort
+from .tool import ToolPort
 
 __all__ = [
     "ChannelPort",

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import List, Optional, Protocol
 
-from lancelot.domain import MemoryEntry
+from ..domain import MemoryEntry
 
 
 class MemoryPort(Protocol):

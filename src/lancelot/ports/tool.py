@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Dict, Protocol
 
-from lancelot.domain import ToolResult
+from ..domain import ToolResult
 
 
 class ToolPort(Protocol):

@@ -1,0 +1,23 @@
+# === Lancelot Manifest v1 ===
+# 解析器：tomllib（标准库）；写回：tomli_w（仅装配器内部使用）
+
+[adapter]
+id            = "memory.inmemory"
+name          = "In-Memory Memory"
+version       = "0.1.0"
+category      = "memory"
+description   = "进程内短期记忆，不持久化。仅用于 V1 演示与测试。"
+min_framework = "1.0.0"
+
+[entry]
+module  = "memory.inmemory"
+factory = "create_memory"
+
+[capabilities]
+provides = ["MemoryPort"]
+requires = []
+conflicts = []
+enhances = []
+
+[config]
+schema = { max_entries = { type = "int", default = 1024, required = false } }

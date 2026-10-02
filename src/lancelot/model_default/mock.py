@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import List
 
-from lancelot.domain import Message
-from lancelot.errors import ModelError
+from ..domain import Message
+from ..errors import ModelError
 
 
 def create_model() -> "MockModel":

@@ -3,7 +3,7 @@
 使用：
     from lancelot.domain import Message, Session, Adapter
 """
-from lancelot.domain.types import (
+from .types import (
     Adapter,
     Capability,
     MemoryEntry,
