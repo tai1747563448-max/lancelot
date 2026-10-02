@@ -34,6 +34,8 @@ htmlcov/
 *.swp
 *.swo
 *~
+# PyCharm 模块文件
+*.iml
 
 # OS
 .DS_Store
