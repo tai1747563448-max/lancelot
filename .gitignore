@@ -1,0 +1,44 @@
+# Python 字节码
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 虚拟环境
+.venv/
+venv/
+env/
+ENV/
+
+# 打包产物
+build/
+dist/
+*.egg-info/
+*.egg
+
+# 测试 / 覆盖率
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# 类型检查
+.mypy_cache/
+.ruff_cache/
+
+# 编辑器
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 元框架产物（默认生成目录，运行时再生成）
+generated/*
+!generated/.gitkeep
