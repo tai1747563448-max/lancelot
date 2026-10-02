@@ -30,7 +30,7 @@ class AssemblerState:
 
     Attributes:
         adapters_root: adapter 源根目录（默认 `./adapters`）。
-        plugins_root: plugin 源根目录（默认 `./plugins`，V1 留空不读）。
+        plugins_root: plugin 源根目录（默认 `./plugins`；V1 不实现，预留 V2 plugin loader）。
         output_root: 生成物输出根目录（默认 `./generated`）。
         registry: 由 scan 填充。装配器启动时由 cli.py 注入一个 Registry 实例。
         selection: 由 select 填充；select 之前是空列表。
@@ -38,6 +38,7 @@ class AssemblerState:
     """
 
     adapters_root: Path = field(default_factory=lambda: Path("./adapters"))
+    # V2 预留——V1 装配器不读 plugins/，但保留字段避免破坏旧 AssemblerState 调用方。
     plugins_root: Path = field(default_factory=lambda: Path("./plugins"))
     output_root: Path = field(default_factory=lambda: Path("./generated"))
 

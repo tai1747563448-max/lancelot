@@ -31,7 +31,6 @@ from lancelot.errors import (
     ManifestKindMismatchError,
     ManifestMissingError,
     ManifestParseError,
-    RegistryError,
 )
 
 
@@ -73,6 +72,11 @@ class ScanReport:
 # ---------- 公开入口 ----------
 
 
+def _warn(report: ScanReport, code: str, message: str, adapter_dir: Path) -> None:
+    """把一条 warning 追加到 report。集中在此便于统一扩展（如统计、过滤）。"""
+    report.warnings.append(ScanWarning(code=code, message=message, adapter_dir=adapter_dir))
+
+
 def scan(adapters_root: Path, registry: Registry) -> ScanReport:
     """扫描 `adapters_root` 下所有一级目录，填充 `registry`。
 
@@ -93,22 +97,20 @@ def scan(adapters_root: Path, registry: Registry) -> ScanReport:
     report = ScanReport()
 
     if not adapters_root.exists():
-        report.warnings.append(
-            ScanWarning(
-                code="E_ADAPTERS_ROOT_MISSING",
-                message=f"adapters root '{adapters_root}' does not exist; nothing to scan",
-                adapter_dir=adapters_root,
-            )
+        _warn(
+            report,
+            "E_ADAPTERS_ROOT_MISSING",
+            f"adapters root '{adapters_root}' does not exist; nothing to scan",
+            adapters_root,
         )
         return report
 
     if not adapters_root.is_dir():
-        report.warnings.append(
-            ScanWarning(
-                code="E_ADAPTERS_ROOT_NOT_DIR",
-                message=f"adapters root '{adapters_root}' is not a directory",
-                adapter_dir=adapters_root,
-            )
+        _warn(
+            report,
+            "E_ADAPTERS_ROOT_NOT_DIR",
+            f"adapters root '{adapters_root}' is not a directory",
+            adapters_root,
         )
         return report
 
@@ -119,14 +121,8 @@ def scan(adapters_root: Path, registry: Registry) -> ScanReport:
     candidates = _discover_candidates(adapters_root)
 
     for adapter_dir in candidates:
-        try:
-            _scan_one(adapter_dir, adapters_root, registry, report)
-        except DuplicateIdError:
-            # E_DUPLICATE_ID：整个 scan 失败
-            raise
-        except RegistryError as e:
-            # Registry 抛的非 duplicate 错误：防御性，正常不会到这里
-            raise
+        # DuplicateIdError → 整次 scan 失败（04 §动作 5）
+        _scan_one(adapter_dir, adapters_root, registry, report)
 
     return report
 
@@ -174,12 +170,11 @@ def _scan_one(
     manifest_path = adapter_dir / "MANIFEST.toml"
 
     if not manifest_path.is_file():
-        report.warnings.append(
-            ScanWarning(
-                code="E_MANIFEST_MISSING",
-                message=f"MANIFEST.toml not found in '{adapter_dir}'",
-                adapter_dir=adapter_dir,
-            )
+        _warn(
+            report,
+            "E_MANIFEST_MISSING",
+            f"MANIFEST.toml not found in '{adapter_dir}'",
+            adapter_dir,
         )
         return
 
@@ -188,24 +183,22 @@ def _scan_one(
         with manifest_path.open("rb") as f:
             data = tomllib.load(f)
     except tomllib.TOMLDecodeError as e:
-        report.warnings.append(
-            ScanWarning(
-                code="E_MANIFEST_PARSE",
-                message=f"TOML parse error in '{manifest_path}': {e}",
-                adapter_dir=adapter_dir,
-            )
+        _warn(
+            report,
+            "E_MANIFEST_PARSE",
+            f"TOML parse error in '{manifest_path}': {e}",
+            adapter_dir,
         )
         return
 
     # 2. 顶层表头校验：V1 只接受 [adapter]
     if "adapter" not in data:
-        report.warnings.append(
-            ScanWarning(
-                code="E_KIND_MISMATCH",
-                message=f"top-level table must be [adapter] in '{manifest_path}' "
-                        f"(V1 does not accept [plugin])",
-                adapter_dir=adapter_dir,
-            )
+        _warn(
+            report,
+            "E_KIND_MISMATCH",
+            f"top-level table must be [adapter] in '{manifest_path}' "
+            f"(V1 does not accept [plugin])",
+            adapter_dir,
         )
         return
 
@@ -213,38 +206,27 @@ def _scan_one(
     try:
         adapter = _parse_manifest(data, adapter_dir, adapters_root)
     except ManifestKindMismatchError as e:
-        report.warnings.append(
-            ScanWarning(code="E_KIND_MISMATCH", message=str(e), adapter_dir=adapter_dir)
-        )
+        _warn(report, "E_KIND_MISMATCH", str(e), adapter_dir)
         return
     except ManifestInvalidError as e:
-        report.warnings.append(
-            ScanWarning(code="E_MANIFEST_INVALID", message=str(e), adapter_dir=adapter_dir)
-        )
+        _warn(report, "E_MANIFEST_INVALID", str(e), adapter_dir)
         return
 
     # 4. reserved port 检查：warning 不跳过
     for cap in adapter.provides:
         if cap.name in _RESERVED_PORTS:
-            report.warnings.append(
-                ScanWarning(
-                    code="E_RESERVED_PORT",
-                    message=f"adapter '{adapter.id}' declares reserved port "
-                            f"'{cap.name}' (reserved by Lancelot, not allowed in V1)",
-                    adapter_dir=adapter_dir,
-                )
+            _warn(
+                report,
+                "E_RESERVED_PORT",
+                f"adapter '{adapter.id}' declares reserved port "
+                f"'{cap.name}' (reserved by Lancelot, not allowed in V1)",
+                adapter_dir,
             )
 
-    # 5. 注册：duplicate 整次失败；其他错误防御性抛出
-    try:
-        registry.register(adapter)
-    except RegistryError as e:
-        # 注册时 duplicate 是唯一预期的失败
-        if "already registered" in str(e):
-            raise DuplicateIdError(
-                f"E_DUPLICATE_ID during scan: {e}"
-            ) from e
-        raise
+    # 5. 注册：duplicate 整次失败
+    #    registry.register 抛 DuplicateIdError（RegistryError 子类），
+    #    这里是 scan 阶段最常见的失败——让整次 scan 失败、退出码 2。
+    registry.register(adapter)
 
     report.registered.append(adapter)
 

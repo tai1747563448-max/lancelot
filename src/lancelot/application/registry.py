@@ -5,7 +5,7 @@
 > V1 不扫 plugins/，所以 Registry V1 只装 adapter。
 
 约束：
-- `register` 时若 ID 已存在，抛 `RegistryError`（不静默覆盖）
+- `register` 时若 ID 已存在，抛 `DuplicateIdError`（继承 `RegistryError`；不静默覆盖）
 - `find_*` 不存在的 ID/能力返回 None 或空列表，不抛异常
 - V1 不实现删除——registry 在装配器启动时填充、退出时丢弃
 - `find_by_capability` 只返回 manifest 中 `[capabilities].provides` 含该端口的 adapter
@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Dict, Iterable, List, Optional
 
 from lancelot.domain.types import Adapter
-from lancelot.errors import RegistryError
+from lancelot.errors import DuplicateIdError
 
 
 class Registry:
@@ -35,10 +35,10 @@ class Registry:
             entry: 已通过 manifest schema 校验的 `Adapter` dataclass。
 
         Raises:
-            RegistryError: 同 ID 已存在（不静默覆盖）。
+            DuplicateIdError: 同 ID 已存在（不静默覆盖）。
         """
         if entry.id in self._by_id:
-            raise RegistryError(
+            raise DuplicateIdError(
                 f"E_DUPLICATE_ID: adapter id '{entry.id}' already registered "
                 f"(previous: {self._by_id[entry.id].name!r})"
             )

@@ -23,40 +23,35 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Sequence
+from typing import Callable, Dict, Sequence
 
 import lancelot
 from lancelot.application.generator import (
-    CopyFailedError,
-    OutputDirExistsError,
-    TemplateRenderFailedError,
     generate,
     print_report as print_generate_report,
 )
-from lancelot.application.launcher import (
-    GeneratedDirMissingError,
-    MainPyMissingError,
-    launch,
-)
+from lancelot.application.launcher import launch
 from lancelot.application.registry import Registry
 from lancelot.application.runner import run as bare_run
 from lancelot.application.scanner import (
     print_report as print_scan_report,
     scan,
 )
-from lancelot.application.selector import (
-    AdapterNotFoundError,
-    DuplicateIdInSelectionError,
-    select,
-    print_selection,
-)
+from lancelot.application.selector import select, print_selection
 from lancelot.application.state import AssemblerState
 from lancelot.errors import (
+    AdapterNotFoundError,
     ConflictError,
+    CopyFailedError,
     DuplicateIdError,
+    DuplicateIdInSelectionError,
     GenerateError,
+    GeneratedDirMissingError,
     LancelotError,
+    MainPyMissingError,
+    OutputDirExistsError,
     RequireNotMetError,
+    TemplateRenderFailedError,
 )
 
 
@@ -70,8 +65,17 @@ EXIT_SELECT = 3
 EXIT_GENERATE = 4
 EXIT_LAUNCH = 5
 
+# 异常族 → 退出码映射表。**顺序很重要**：launch 家族（EXIT_LAUNCH=5）必须
+# 先于 generate 家族（EXIT_GENERATE=4）判断，因为前者继承后者。
+_EXIT_CODE_TABLE = (
+    (EXIT_LAUNCH, (GeneratedDirMissingError, MainPyMissingError)),
+    (EXIT_GENERATE, (OutputDirExistsError, CopyFailedError, TemplateRenderFailedError)),
+    (EXIT_SELECT, (AdapterNotFoundError, DuplicateIdInSelectionError, RequireNotMetError, ConflictError)),
+    (EXIT_DUPLICATE_ID, (DuplicateIdError,)),
+)
 
-# ---------- 入口 ----------
+
+# ---------- argparse 构造 ----------
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -85,22 +89,22 @@ def build_parser() -> argparse.ArgumentParser:
         action="version",
         version=f"lancelot {lancelot.__version__}",
     )
-
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    # scan
-    p_scan = sub.add_parser(
-        "scan",
-        help="列出本地可用的 adapter（不执行任何 adapter 代码）",
-    )
-    p_scan.add_argument(
+    # 全局参数：--adapters-root 给 scan/compose 用；run/launch 不读，
+    # 但放在顶层避免子命令间不一致。
+    parser.add_argument(
         "--adapters-root",
         type=Path,
         default=Path("./adapters"),
-        help="adapter 源根目录（默认 ./adapters）",
+        help="adapter 源根目录（默认 ./adapters；scan/compose 用）",
     )
 
-    # run
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser(
+        "scan",
+        help="列出本地可用的 adapter（不执行任何 adapter 代码）",
+    )
+
     p_run = sub.add_parser(
         "run",
         help="bare Lancelot 直接跑（不接 adapter；不写文件）",
@@ -118,7 +122,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="单次循环最大步数（默认 10）",
     )
 
-    # compose
     p_compose = sub.add_parser(
         "compose",
         help="把选中的 adapter 烘进 generated/<name>/",
@@ -147,17 +150,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="从 YAML 读 --use 列表（文件含 'use: [...]' 键）",
     )
     p_compose.add_argument(
-        "--adapters-root",
-        type=Path,
-        default=Path("./adapters"),
-    )
-    p_compose.add_argument(
         "--output-root",
         type=Path,
         default=Path("./generated"),
     )
 
-    # launch
     p_launch = sub.add_parser(
         "launch",
         help="启动已生成的 framework（等价于 cd generated/<name> && python -m app.main）",
@@ -180,27 +177,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """CLI 主入口。返回退出码（0 = OK）。"""
-    parser = build_parser()
-    args = parser.parse_args(argv)
-
-    try:
-        if args.command == "scan":
-            return _cmd_scan(args)
-        if args.command == "run":
-            return _cmd_run(args)
-        if args.command == "compose":
-            return _cmd_compose(args)
-        if args.command == "launch":
-            return _cmd_launch(args)
-    except LancelotError as e:
-        print(f"lancelot: {type(e).__name__}: {e}", file=sys.stderr)
-        return _exit_code_for(e)
-
-    return EXIT_OK
-
-
 # ---------- 子命令实现 ----------
 
 
@@ -208,11 +184,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     """scan：列出本地 adapter。"""
     registry = Registry()
     report = scan(args.adapters_root, registry)
-
-    # warning 走 stderr（机器可读 + 人可读）
     print_scan_report(report, file=sys.stderr)
 
-    # 主体表格走 stdout
     adapters = registry.all()
     print(f"{'id':<28} {'name':<24} {'version':<10} {'category':<10} capabilities")
     for a in adapters:
@@ -234,7 +207,6 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 def _cmd_compose(args: argparse.Namespace) -> int:
     """compose：scan → select → generate。"""
-    # 1. 解析 --use 列表
     use_ids = list(args.use or [])
     if args.select_file is not None:
         use_ids = _load_select_file(args.select_file)
@@ -243,9 +215,8 @@ def _cmd_compose(args: argparse.Namespace) -> int:
             "lancelot: --use <id> (or --select-file) is required for compose",
             file=sys.stderr,
         )
-        return EXIT_SELECT  # 空 selection 视作 select 阶段错误
+        return EXIT_SELECT
 
-    # 2. scan
     registry = Registry()
     state = AssemblerState(
         adapters_root=args.adapters_root,
@@ -255,11 +226,9 @@ def _cmd_compose(args: argparse.Namespace) -> int:
     scan_report = scan(state.adapters_root, registry)
     print_scan_report(scan_report, file=sys.stderr)
 
-    # 3. select（错误码 3 由 _exit_code_for 自动映射）
     result = select(registry, use_ids)
     print_selection(result, file=sys.stdout)
 
-    # 4. generate
     state.selection = result.selection
     state.name = args.name
     gen_report = generate(state, force=args.force)
@@ -277,6 +246,29 @@ def _cmd_launch(args: argparse.Namespace) -> int:
         args.name,
         python_executable=args.python,
     )
+
+
+# ---------- 子命令分派 ----------
+
+
+_DISPATCH: Dict[str, Callable[[argparse.Namespace], int]] = {
+    "scan": _cmd_scan,
+    "run": _cmd_run,
+    "compose": _cmd_compose,
+    "launch": _cmd_launch,
+}
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """CLI 主入口。返回退出码（0 = OK）。"""
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    try:
+        return _DISPATCH[args.command](args)
+    except LancelotError as e:
+        print(f"lancelot: {type(e).__name__}: {e}", file=sys.stderr)
+        return _exit_code_for(e)
 
 
 # ---------- 工具 ----------
@@ -298,25 +290,11 @@ def _load_select_file(path: Path) -> list[str]:
 
 
 def _exit_code_for(e: LancelotError) -> int:
-    """按异常类型 → 退出码。
-
-    注意顺序：launch 家族（EXIT_LAUNCH=5）必须先于 generate 家族
-    （EXIT_GENERATE=4）判断，因为它们继承 GenerateError。
-    """
-    # launch 家族（5）
-    if isinstance(e, (GeneratedDirMissingError, MainPyMissingError)):
-        return EXIT_LAUNCH
-    # generate 家族（4）
-    if isinstance(e, (OutputDirExistsError, CopyFailedError, TemplateRenderFailedError)):
-        return EXIT_GENERATE
-    # select 家族（3）
-    if isinstance(e, (AdapterNotFoundError, DuplicateIdInSelectionError,
-                      RequireNotMetError, ConflictError)):
-        return EXIT_SELECT
-    # scan 家族（2）
-    if isinstance(e, DuplicateIdError):
-        return EXIT_DUPLICATE_ID
-    # fallback（其它 GenerateError / 未分类 LancelotError）
+    """按异常类型 → 退出码。"""
+    for code, types in _EXIT_CODE_TABLE:
+        if isinstance(e, types):
+            return code
+    # 兜底：未在表中登记的 GenerateError 子类仍归 generate 家族
     if isinstance(e, GenerateError):
         return EXIT_GENERATE
     return EXIT_GENERIC

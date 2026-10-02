@@ -27,22 +27,11 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from lancelot.application.state import AssemblerState
 from lancelot.domain.types import Adapter
-from lancelot.errors import GenerateError, LancelotError
-
-
-# ---------- 本地异常（04 错误码表里有，03 错误家族未细列） ----------
-
-
-class OutputDirExistsError(GenerateError):
-    """E_OUTPUT_DIR_EXISTS：目标生成目录已存在。"""
-
-
-class CopyFailedError(GenerateError):
-    """E_COPY_FAILED：runtime / adapter 复制失败（IO 错、权限错等）。"""
-
-
-class TemplateRenderFailedError(GenerateError):
-    """E_TEMPLATE_RENDER_FAILED：模板渲染或写入失败。"""
+from lancelot.errors import (
+    CopyFailedError,
+    OutputDirExistsError,
+    TemplateRenderFailedError,
+)
 
 
 # ---------- 报告 ----------
@@ -136,7 +125,7 @@ def generate(
                 raise CopyFailedError(
                     f"E_COPY_FAILED: runtime source '{src}' missing or not a directory"
                 )
-            shutil.copytree(src, target / "lancelot_runtime" / sub)
+            _copytree(src, target / "lancelot_runtime" / sub)
             report.written.append(Path("lancelot_runtime") / sub)
 
         for fname in _RUNTIME_FILES:
@@ -165,8 +154,7 @@ def generate(
                 raise CopyFailedError(
                     f"E_COPY_FAILED: adapter source '{src}' missing"
                 )
-            dst = target / "adapters" / rel
-            shutil.copytree(src, dst)
+            _copytree(src, target / "adapters" / rel)
             report.written.append(Path("adapters") / rel)
     except CopyFailedError:
         raise
@@ -201,15 +189,12 @@ def _render_all(
             f"E_TEMPLATE_RENDER_FAILED: cannot load templates from '{templates_dir}': {e}"
         ) from e
 
-    # 通用上下文
     adapters: List[Adapter] = state.selection
-    memory_count = sum(1 for a in adapters if a.category == "memory")
-    tool_count = sum(1 for a in adapters if a.category == "tools")
     ctx = {
         "name": state.name,
         "adapters": adapters,
-        "memory_count": memory_count,
-        "tool_count": tool_count,
+        "memory_count": sum(1 for a in adapters if a.category == "memory"),
+        "tool_count": sum(1 for a in adapters if a.category == "tools"),
         "timestamp": _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
 
@@ -222,42 +207,48 @@ def _render_all(
     ]
 
     # app/__init__.py 是空文件，让 app/ 成为 Python 包
-    try:
-        (target / "app" / "__init__.py").write_text("")
-        report.written.append(Path("app") / "__init__.py")
-    except OSError as e:
-        raise TemplateRenderFailedError(
-            f"E_TEMPLATE_RENDER_FAILED: cannot write app/__init__.py: {e}"
-        ) from e
+    _write_text(target / "app" / "__init__.py", "", report, Path("app") / "__init__.py")
 
     for tpl_name, out_rel in renderings:
-        try:
-            tpl = env.get_template(tpl_name)
-        except Exception as e:
-            raise TemplateRenderFailedError(
-                f"E_TEMPLATE_RENDER_FAILED: cannot load template '{tpl_name}': {e}"
-            ) from e
+        _render_one(env, tpl_name, target / out_rel, ctx, report, Path(out_rel))
 
-        try:
-            rendered = tpl.render(**ctx)
-        except Exception as e:
-            raise TemplateRenderFailedError(
-                f"E_TEMPLATE_RENDER_FAILED: rendering '{tpl_name}' failed: {e}"
-            ) from e
 
-        out_path = target / out_rel
-        try:
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text(rendered, encoding="utf-8")
-        except OSError as e:
-            raise TemplateRenderFailedError(
-                f"E_TEMPLATE_RENDER_FAILED: cannot write '{out_path}': {e}"
-            ) from e
+def _render_one(
+    env: "Environment",
+    tpl_name: str,
+    out_path: Path,
+    ctx: dict,
+    report: GenerateReport,
+    report_rel: Path,
+) -> None:
+    """加载一个 jinja 模板、渲染、写到 out_path；任意 IO / 渲染失败 → TemplateRenderFailedError。"""
+    try:
+        rendered = env.get_template(tpl_name).render(**ctx)
+    except Exception as e:
+        raise TemplateRenderFailedError(
+            f"E_TEMPLATE_RENDER_FAILED: cannot load/render '{tpl_name}': {e}"
+        ) from e
+    _write_text(out_path, rendered, report, report_rel)
 
-        report.written.append(Path(out_rel))
+
+def _write_text(out_path: Path, content: str, report: GenerateReport, report_rel: Path) -> None:
+    """写一个文本文件并登记到 report。"""
+    try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(content, encoding="utf-8")
+    except OSError as e:
+        raise TemplateRenderFailedError(
+            f"E_TEMPLATE_RENDER_FAILED: cannot write '{out_path}': {e}"
+        ) from e
+    report.written.append(report_rel)
 
 
 # ---------- 路径推导 ----------
+
+
+def _copytree(src: Path, dst: Path) -> None:
+    """shutil.copytree 包一层：忽略 __pycache__ 与 .pyc，避免污染生成物。"""
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
 
 
 def _default_lancelot_src() -> Path:

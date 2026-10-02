@@ -50,10 +50,6 @@ class ManifestKindMismatchError(ManifestError):
     """E_KIND_MISMATCH：顶层表头不是 [adapter]（V1 仅接受此一种）。"""
 
 
-class DuplicateIdError(ManifestError):
-    """E_DUPLICATE_ID：同一 ID 在多处出现。"""
-
-
 # ---------- 端口地址 / Registry ----------
 
 
@@ -67,6 +63,10 @@ class PortContractViolation(LancelotPortAddressError):
 
 class RegistryError(LancelotPortAddressError):
     """Registry 协议违反（如 ID 重复注册）。"""
+
+
+class DuplicateIdError(RegistryError):
+    """E_DUPLICATE_ID：同一 ID 在多处出现（多发生在 scan 阶段跨 adapter 重复）。"""
 
 
 # ---------- 装配阶段：adapter 选择 ----------
@@ -84,11 +84,39 @@ class ConflictError(LancelotAdaptersError):
     """E_CONFLICT：选中 adapter 包含 manifest.conflicts 中的互斥项。"""
 
 
+class AdapterNotFoundError(LancelotAdaptersError):
+    """E_ADAPTER_NOT_FOUND：--use 指定了 registry 中不存在的 ID。"""
+
+
+class DuplicateIdInSelectionError(LancelotAdaptersError):
+    """E_DUPLICATE_ID_IN_SELECTION：同一 ID 在 --use 中出现两次。"""
+
+
 # ---------- 启动阶段：generate / launch ----------
 
 
 class GenerateError(LancelotError):
     """generate / launch 阶段失败（目标目录、复制、模板渲染等）。"""
+
+
+class OutputDirExistsError(GenerateError):
+    """E_OUTPUT_DIR_EXISTS：目标生成目录已存在。"""
+
+
+class CopyFailedError(GenerateError):
+    """E_COPY_FAILED：runtime / adapter 复制失败（IO 错、权限错等）。"""
+
+
+class TemplateRenderFailedError(GenerateError):
+    """E_TEMPLATE_RENDER_FAILED：模板渲染或写入失败。"""
+
+
+class GeneratedDirMissingError(GenerateError):
+    """E_GENERATED_DIR_MISSING：generated/<name>/ 不存在。"""
+
+
+class MainPyMissingError(GenerateError):
+    """E_MAIN_PY_MISSING：生成物目录下找不到 app/main.py。"""
 
 
 # ---------- 运行阶段：生成物运行时 ----------

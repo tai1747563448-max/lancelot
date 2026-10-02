@@ -25,22 +25,11 @@ from typing import List
 from lancelot.application.registry import Registry
 from lancelot.domain.types import Adapter
 from lancelot.errors import (
+    AdapterNotFoundError,
     ConflictError,
-    LancelotAdaptersError,
+    DuplicateIdInSelectionError,
     RequireNotMetError,
 )
-
-
-# ---------- 本地异常（04 错误码表里有，03 错误家族未细列） ----------
-# 待 errors.py 扩展时迁移到 errors.py；当前让 cli.py 可按异常类型分发退出码。
-
-
-class AdapterNotFoundError(LancelotAdaptersError):
-    """E_ADAPTER_NOT_FOUND：--use 指定了 registry 中不存在的 ID。"""
-
-
-class DuplicateIdInSelectionError(LancelotAdaptersError):
-    """E_DUPLICATE_ID_IN_SELECTION：同一 ID 在 --use 中出现两次。"""
 
 
 # ---------- 配置 ----------

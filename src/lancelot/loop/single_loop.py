@@ -30,6 +30,7 @@ V1 算法（V1 mock model 不返回 tool_calls，但仍保留工具调用处理�
 """
 from __future__ import annotations
 
+import sys
 from typing import Any, Dict, List, Optional
 
 from ..domain import MemoryEntry, Message, Session, ToolResult
@@ -101,7 +102,6 @@ class SingleLoop:
                     )
                 except Exception as e:
                     # Memory 错误不应让 loop 崩——记一行 stderr 后继续
-                    import sys
                     print(f"[loop] memory.put failed: {e}", file=sys.stderr)
 
         # 外层循环耗尽：max_turns 用完

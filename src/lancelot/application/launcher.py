@@ -17,18 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from lancelot.errors import GenerateError
-
-
-# ---------- 本地异常 ----------
-
-
-class GeneratedDirMissingError(GenerateError):
-    """E_GENERATED_DIR_MISSING：generated/<name>/ 不存在。"""
-
-
-class MainPyMissingError(GenerateError):
-    """E_MAIN_PY_MISSING：生成物目录下找不到 app/main.py。"""
+from lancelot.errors import GeneratedDirMissingError, MainPyMissingError
 
 
 # ---------- 公开入口 ----------

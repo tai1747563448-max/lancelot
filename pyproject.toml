@@ -1,0 +1,33 @@
+[project]
+name = "lancelot"
+version = "1.0.0"
+description = "Lancelot 元框架——造 agent 框架的工具。V1 = 装配器 + CLI + 内置 adapter。"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Lancelot maintainers" }]
+license = { text = "MIT" }
+dependencies = [
+    "jinja2>=3.0",
+    "pyyaml>=6.0",
+    "tomli_w>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+lancelot = "lancelot.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/tai1747563448-max/lancelot"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
